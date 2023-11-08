@@ -79,6 +79,12 @@ static void print_formats(int fd, enum v4l2_buf_type type) {
 
 int main() {
 
+    FILE *out_file = fopen("out.h264", "w");
+    if (!out_file) {
+        fprintf(stderr, "error: failed to open output file (%s)\n", strerror(errno));
+        exit(1);
+    }
+
     int sensor_fd;
     int adapter_fd;
     int encoder_fd;
@@ -202,6 +208,8 @@ int main() {
 
         if (sensor_events & POLLERR) {
             fprintf(stderr, "error: sensor error\n");
+            // sleep(5);
+            // exit(1);
         } else if (sensor_events & POLLIN) {
 
             // Start by unqueueing a potential captured buffer.            
@@ -216,7 +224,7 @@ int main() {
                 // adapter device that convert the image format, in order to be later
                 // accepted by H.264 encoder.
                 int dmabuf_fd = sensor_dmabuf_fd[cap_buf.index];
-                printf("info: sensor buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_buf.bytesused, dmabuf_fd);
+                // printf("info: sensor buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_buf.bytesused, dmabuf_fd);
 
                 // We configured the adapter device to take planar buffer (because it
                 // only accepts that), but because there is only one plane we just use
@@ -241,17 +249,16 @@ int main() {
 
                 check_res(vid_queue_buffer(adapter_fd, &out_buf));
 
-            } else {
-                printf("info: sensor unqueue retry...\n");
             }
 
         }
 
         if (adapter_events & POLLERR) {
             fprintf(stderr, "error: adapter error\n");
+            // sleep(5);
+            // exit(1);
         } else if (adapter_events & POLLIN) {
 
-            // Start by unqueueing a potential captured buffer.       
             struct v4l2_plane cap_plane = {0};     
             struct v4l2_buffer cap_buf = {0};
             cap_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -265,17 +272,17 @@ int main() {
                 // capture buffer is planar instead of non-planar, but this make no major
                 // difference since we have one plane.
                 int dmabuf_fd = adapter_dmabuf_fd[cap_buf.index];
-                printf("info: adapter buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_plane.bytesused, dmabuf_fd);
+                // printf("info: adapter buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_plane.bytesused, dmabuf_fd);
 
                 struct v4l2_plane out_plane = {0};
                 out_plane.m.fd = dmabuf_fd;
-                out_plane.length = cap_buf.length;
-                out_plane.bytesused = cap_buf.bytesused;
+                out_plane.length = cap_plane.length; // Remember: use the plane info.
+                out_plane.bytesused = cap_plane.bytesused;
 
                 struct v4l2_buffer out_buf = {0};
                 out_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
                 out_buf.memory = V4L2_MEMORY_DMABUF;
-                // out_buf.timestamp = cap_buf.timestamp;
+                out_buf.timestamp = cap_buf.timestamp;
                 out_buf.field = cap_buf.field;
                 out_buf.index = cap_buf.index;
                 out_buf.m.planes = &out_plane;
@@ -285,18 +292,67 @@ int main() {
 
             }
 
-            // TODO: Unqueue output buffers and queue back capture one to the sensor.
+            // Try unqueuing a previous output buffer.
+            struct v4l2_plane out_plane = {0};     
+            struct v4l2_buffer out_buf = {0};
+            out_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+            out_buf.memory = V4L2_MEMORY_DMABUF;
+            out_buf.m.planes = &out_plane;
+            out_buf.length = 1;
+
+            if (check_ok_or_retry(vid_unqueue_buffer(adapter_fd, &out_buf))) {
+                // printf("info: adapter output buffer %d unqueued (fd %d)\n", out_buf.index, out_plane.m.fd);
+                check_res(vid_queue_mmap_buffer(sensor_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE, out_buf.index));
+            }
 
         }
 
         if (encoder_events & POLLERR) {
-            // fprintf(stderr, "error: encoder error\n");
+            fprintf(stderr, "error: encoder error\n");
+            // sleep(5);
+            // exit(1);
         } else if (encoder_events & POLLIN) {
-            // Process the encoded frame from its memory mapping (send it over UDP?).
-            printf("info: encoder pollin\n");
-        }
+            
+            struct v4l2_plane cap_plane = {0};     
+            struct v4l2_buffer cap_buf = {0};
+            cap_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+            cap_buf.memory = V4L2_MEMORY_MMAP;
+            cap_buf.m.planes = &cap_plane;
+            cap_buf.length = 1;
 
-        sleep(1);
+            if (check_ok_or_retry(vid_unqueue_buffer(encoder_fd, &cap_buf))) {
+
+                // We reached the end of our pipeline! The fully encoded frame should be
+                // available in the buffer that we just unqueued, we just need to know
+                // we this frame is mapped in our memory.
+                struct encoder_buffer *buffer = &encoder_buffers[cap_buf.index];
+                unsigned size = cap_plane.bytesused;
+
+                printf("info: encoded buffer %d with %d bytes at %p\n", cap_buf.index, size, buffer->start);
+                // TODO: Process frame.
+
+                unsigned long written_size = fwrite(buffer->start, 1, size, out_file);
+                printf("info: written size %lu\n", written_size);
+
+                // Queue the capture buffer after frame has been processed.
+                check_res(vid_queue_buffer(encoder_fd, &cap_buf));
+
+            }
+
+            // Try unqueuing a previous output buffer.
+            struct v4l2_plane out_plane = {0};     
+            struct v4l2_buffer out_buf = {0};
+            out_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+            out_buf.memory = V4L2_MEMORY_DMABUF;
+            out_buf.m.planes = &out_plane;
+            out_buf.length = 1;
+
+            if (check_ok_or_retry(vid_unqueue_buffer(encoder_fd, &out_buf))) {
+                // printf("info: encoder output buffer %d unqueued (fd %d)\n", out_buf.index, out_plane.m.fd);
+                check_res(vid_queue_mmap_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, out_buf.index, 1));
+            }
+
+        }
 
     }
 
