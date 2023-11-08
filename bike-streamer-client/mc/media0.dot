@@ -1,0 +1,12 @@
+digraph board {
+	rankdir=TB
+	n00000001 [label="bcm2835_isp0\n", shape=box, style=filled, fillcolor=yellow]
+	n00000001 -> n0000000c [style=bold]
+	n00000001 -> n00000012 [style=bold]
+	n00000001 -> n00000018 [style=bold]
+	n00000006 [label="bcm2835-isp0-output0\n/dev/video13", shape=box, style=filled, fillcolor=yellow]
+	n00000006 -> n00000001 [style=bold]
+	n0000000c [label="bcm2835-isp0-capture1\n/dev/video14", shape=box, style=filled, fillcolor=yellow]
+	n00000012 [label="bcm2835-isp0-capture2\n/dev/video15", shape=box, style=filled, fillcolor=yellow]
+	n00000018 [label="bcm2835-isp0-capture3\n/dev/video16", shape=box, style=filled, fillcolor=yellow]
+}

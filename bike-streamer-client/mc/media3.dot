@@ -1,0 +1,8 @@
+digraph board {
+	rankdir=TB
+	n00000001 [label="{{} | imx477 10-001a\n/dev/v4l-subdev0 | {<port0> 0 | <port1> 1}}", shape=Mrecord, style=filled, fillcolor=green]
+	n00000001:port0 -> n00000004 [style=bold]
+	n00000001:port1 -> n0000000a [style=bold]
+	n00000004 [label="unicam-image\n/dev/video0", shape=box, style=filled, fillcolor=yellow]
+	n0000000a [label="unicam-embedded\n/dev/video1", shape=box, style=filled, fillcolor=yellow]
+}
