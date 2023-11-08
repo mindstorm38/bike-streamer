@@ -5,7 +5,7 @@
 
 
 enum vid_result {
-    VID_OK,
+    VID_OK = 0,
     VID_ERR_STOP,         // Stop enumeration
     VID_ERR_RETRY,        // Retry
     VID_ERR_SYS,          // System error in errno
@@ -145,6 +145,7 @@ static enum vid_result vid_queue_mmap_buffer_mp(int fd, enum v4l2_buf_type type,
     struct v4l2_buffer buf = {0};
     buf.type = type;
     buf.memory = V4L2_MEMORY_MMAP;
+    buf.index = index;
     buf.m.planes = planes;
     buf.length = planes_count;
     return vid_queue_buffer(fd, &buf);
@@ -208,6 +209,7 @@ static enum vid_result vid_queue_dma_buffer_mp(int fd, enum v4l2_buf_type type, 
     struct v4l2_buffer buf = {0};
     buf.type = type;
     buf.memory = V4L2_MEMORY_DMABUF;
+    buf.index = index;
     buf.m.planes = planes;
     buf.length = planes_count;
 

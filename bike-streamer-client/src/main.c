@@ -5,8 +5,10 @@
 #include <sys/time.h>
 #include <sys/poll.h>
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 
@@ -18,12 +20,16 @@ struct encoder_buffer {
 };
 
 
-static enum vid_result check_res(enum vid_result res) {
+static void check_res(enum vid_result res) {
     switch (res) {
     case VID_OK:
+        return;
     case VID_ERR_STOP:
+        fprintf(stderr, "error: unhandled stop enumeration\n");
+        break;
     case VID_ERR_RETRY:
-        return res;
+        fprintf(stderr, "error: unhandled retry\n");
+        break;
     case VID_ERR_SYS:
         fprintf(stderr, "error: system error (%s)\n", strerror(errno));
         break;
@@ -38,6 +44,17 @@ static enum vid_result check_res(enum vid_result res) {
         break;
     }
     exit(1);
+}
+
+static bool check_ok_or_retry(enum vid_result res) {
+    if (res == VID_OK) {
+        return true;
+    } else if (res == VID_ERR_RETRY) {
+        return false;
+    } else {
+        check_res(res);
+        exit(1);  // Ensure that the result is not undefined.
+    }
 }
 
 static void check_cap(struct v4l2_capability *cap, unsigned flag, const char *err) {
@@ -128,7 +145,6 @@ int main() {
         check_res(vid_export_mmap_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, i, 0, &adapter_dmabuf_fd[i]));
         check_res(vid_queue_mmap_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, i, 1));
     }
-    // check_res(vid_queue_mmap_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, 0, 1));
 
     printf("info: init encoder capture buffer...\n");
     struct encoder_buffer encoder_buffers[BUFFERS_COUNT] = {0};
@@ -146,7 +162,7 @@ int main() {
         encoder_buffers[i].start = start;
         encoder_buffers[i].length = length;
 
-        // check_res(vid_queue_mmap_buffer_mp(encoder_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, i, 1));
+        check_res(vid_queue_mmap_buffer_mp(encoder_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, i, 1));
 
     }
 
@@ -154,8 +170,8 @@ int main() {
     check_res(vid_stream_on(sensor_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE));
     check_res(vid_stream_on(adapter_fd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE));
     check_res(vid_stream_on(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE));
-    // check_res(vid_stream_on(encoder_fd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE));
-    // check_res(vid_stream_on(encoder_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE));
+    check_res(vid_stream_on(encoder_fd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE));
+    check_res(vid_stream_on(encoder_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE));
 
     printf("info: looping...\n");
 
@@ -187,26 +203,90 @@ int main() {
         if (sensor_events & POLLERR) {
             fprintf(stderr, "error: sensor error\n");
         } else if (sensor_events & POLLIN) {
-            printf("info: sensor pollin\n");
-            // Transmit the captured buffer to the adapter with its DMABUF fd.
-            unsigned index, size;
-            if (check_res(vid_unqueue_mmap_buffer(sensor_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE, &index, &size)) == VID_OK) {
-                int dmabuf_fd = sensor_dmabuf_fd[index];
-                printf("info: sensor buffer %d with %d bytes (fd %d)\n", index, size, dmabuf_fd);
-                check_res(vid_queue_dma_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, index, 1, &dmabuf_fd));
+
+            // Start by unqueueing a potential captured buffer.            
+            struct v4l2_buffer cap_buf = {0};
+            cap_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            cap_buf.memory = V4L2_MEMORY_MMAP;
+
+            if (check_ok_or_retry(vid_unqueue_buffer(sensor_fd, &cap_buf))) {
+
+                // Once we successfully captured a buffer, we get the DMABUF file 
+                // descriptor associated to that buffer in order to pass it to the
+                // adapter device that convert the image format, in order to be later
+                // accepted by H.264 encoder.
+                int dmabuf_fd = sensor_dmabuf_fd[cap_buf.index];
+                printf("info: sensor buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_buf.bytesused, dmabuf_fd);
+
+                // We configured the adapter device to take planar buffer (because it
+                // only accepts that), but because there is only one plane we just use
+                // a regular variable, we should set the length and byteused of the 
+                // buffer pointed to by the given DMABUF.
+                struct v4l2_plane out_plane = {0};
+                out_plane.m.fd = dmabuf_fd;
+                out_plane.length = cap_buf.length;
+                out_plane.bytesused = cap_buf.bytesused;
+
+                // Note that we are importing most of the parameters from captured buffer
+                // like the index, because we configured as many sensor capture buffers as
+                // adapter output buffers.
+                struct v4l2_buffer out_buf = {0};
+                out_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+                out_buf.memory = V4L2_MEMORY_DMABUF;
+                out_buf.timestamp = cap_buf.timestamp;
+                out_buf.field = cap_buf.field;
+                out_buf.index = cap_buf.index;
+                out_buf.m.planes = &out_plane;
+                out_buf.length = 1;
+
+                check_res(vid_queue_buffer(adapter_fd, &out_buf));
+
+            } else {
+                printf("info: sensor unqueue retry...\n");
             }
+
         }
 
         if (adapter_events & POLLERR) {
             fprintf(stderr, "error: adapter error\n");
         } else if (adapter_events & POLLIN) {
-            printf("info: adapter pollin\n");
-            // Transmit the captured buffer to the encoder with its DMABUF fd.
-            unsigned index, size;
-            if (check_res(vid_unqueue_mmap_buffer_mp(adapter_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE, &index, 1, &size)) == VID_OK) {
-                int dmabuf_fd = adapter_dmabuf_fd[index];
-                printf("info: adapter buffer %d with %d bytes (fd %d)\n", index, size, dmabuf_fd);
+
+            // Start by unqueueing a potential captured buffer.       
+            struct v4l2_plane cap_plane = {0};     
+            struct v4l2_buffer cap_buf = {0};
+            cap_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+            cap_buf.memory = V4L2_MEMORY_MMAP;
+            cap_buf.m.planes = &cap_plane;
+            cap_buf.length = 1;
+
+            if (check_ok_or_retry(vid_unqueue_buffer(adapter_fd, &cap_buf))) {
+
+                // Read the comment above, the pattern is the same here except the the 
+                // capture buffer is planar instead of non-planar, but this make no major
+                // difference since we have one plane.
+                int dmabuf_fd = adapter_dmabuf_fd[cap_buf.index];
+                printf("info: adapter buffer %d with %d bytes (fd %d)\n", cap_buf.index, cap_plane.bytesused, dmabuf_fd);
+
+                struct v4l2_plane out_plane = {0};
+                out_plane.m.fd = dmabuf_fd;
+                out_plane.length = cap_buf.length;
+                out_plane.bytesused = cap_buf.bytesused;
+
+                struct v4l2_buffer out_buf = {0};
+                out_buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+                out_buf.memory = V4L2_MEMORY_DMABUF;
+                // out_buf.timestamp = cap_buf.timestamp;
+                out_buf.field = cap_buf.field;
+                out_buf.index = cap_buf.index;
+                out_buf.m.planes = &out_plane;
+                out_buf.length = 1;
+
+                check_res(vid_queue_buffer(encoder_fd, &out_buf));
+
             }
+
+            // TODO: Unqueue output buffers and queue back capture one to the sensor.
+
         }
 
         if (encoder_events & POLLERR) {
@@ -215,6 +295,8 @@ int main() {
             // Process the encoded frame from its memory mapping (send it over UDP?).
             printf("info: encoder pollin\n");
         }
+
+        sleep(1);
 
     }
 
