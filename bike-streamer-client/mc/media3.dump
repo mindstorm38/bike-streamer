@@ -1,0 +1,37 @@
+Media controller API version 6.1.54
+
+Media device information
+------------------------
+driver          unicam
+model           unicam
+serial          
+bus info        platform:3f801000.csi
+hw revision     0x0
+driver version  6.1.54
+
+Device topology
+- entity 1: imx477 10-001a (2 pads, 2 links)
+            type V4L2 subdev subtype Sensor flags 0
+            device node name /dev/v4l-subdev0
+        pad0: Source
+                [fmt:SBGGR12_1X12/2028x1080 field:none colorspace:raw xfer:none ycbcr:601 quantization:full-range
+                 crop.bounds:(8,16)/4056x3040
+                 crop:(8,456)/4056x2160]
+                -> "unicam-image":0 [ENABLED,IMMUTABLE]
+        pad1: Source
+                [fmt:unknown/16384x1 field:none
+                 crop.bounds:(8,16)/4056x3040
+                 crop:(8,456)/4056x2160]
+                -> "unicam-embedded":0 [ENABLED,IMMUTABLE]
+
+- entity 4: unicam-image (1 pad, 1 link)
+            type Node subtype V4L flags 1
+            device node name /dev/video0
+        pad0: Sink
+                <- "imx477 10-001a":0 [ENABLED,IMMUTABLE]
+
+- entity 10: unicam-embedded (1 pad, 1 link)
+             type Node subtype V4L flags 0
+             device node name /dev/video1
+        pad0: Sink
+                <- "imx477 10-001a":1 [ENABLED,IMMUTABLE]

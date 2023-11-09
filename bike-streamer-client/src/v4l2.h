@@ -19,15 +19,15 @@ enum vid_result vid_query_capability(int fd, struct v4l2_capability *dst);
 enum vid_result vid_stream_on(int fd, enum v4l2_buf_type type);
 enum vid_result vid_stream_off(int fd, enum v4l2_buf_type type);
 
-enum vid_result vid_query_crop_capability(int fd, struct v4l2_cropcap *dst);
-enum vid_result vid_get_crop(int fd, enum v4l2_buf_type type, struct v4l2_rect *dst);
-enum vid_result vid_set_crop(int fd, enum v4l2_buf_type type, struct v4l2_rect src);
+enum vid_result vid_get_selection(int fd, struct v4l2_selection *sel);
+enum vid_result vid_set_selection(int fd, struct v4l2_selection *sel);
 
 enum vid_result vid_enum_format(int fd, struct v4l2_fmtdesc *dst);
 enum vid_result vid_get_format(int fd, struct v4l2_format *dst);
 enum vid_result vid_set_format(int fd, struct v4l2_format *src);
-enum vid_result vid_set_format_checked(int fd, enum v4l2_buf_type type, unsigned width, unsigned height, unsigned pixelformat);
-enum vid_result vid_set_format_mp_checked(int fd, enum v4l2_buf_type type, unsigned width, unsigned height, unsigned pixelformat, unsigned planes);
+
+enum vid_result vid_get_param(int fd, struct v4l2_streamparm *param);
+enum vid_result vid_set_param(int fd, struct v4l2_streamparm *param);
 
 enum vid_result vid_request_buffers(int fd, struct v4l2_requestbuffers *req);
 enum vid_result vid_export_buffer(int fd, struct v4l2_exportbuffer *exp);
@@ -35,6 +35,79 @@ enum vid_result vid_query_buffer(int fd, struct v4l2_buffer *buf);
 enum vid_result vid_queue_buffer(int fd, struct v4l2_buffer *buf);
 enum vid_result vid_unqueue_buffer(int fd, struct v4l2_buffer *buf);
 
+// SHORTCUT FOR SELECTION //
+static enum vid_result vid_get_checked_selection(int fd, enum v4l2_buf_type type, unsigned target, struct v4l2_rect *rect) {
+    
+    struct v4l2_selection sel = {0};
+    sel.type = type;
+    sel.target = target;
+
+    enum vid_result res = vid_get_selection(fd, &sel);
+    if (res != VID_OK)
+        return res;
+
+    *rect = sel.r;
+    return VID_OK;
+     
+}
+
+static enum vid_result vid_set_checked_selection(int fd, enum v4l2_buf_type type, unsigned target, unsigned flags, struct v4l2_rect rect) {
+    
+    struct v4l2_selection sel = {0};
+    sel.type = type;
+    sel.target = target;
+    sel.r = rect;
+    
+    enum vid_result res =  vid_set_selection(fd, &sel);
+    if (res != VID_OK)
+        return res;
+
+    if (sel.r.left != rect.left || sel.r.top != rect.top || sel.r.width != rect.width || sel.r.height != rect.height)
+        return VID_ERR_NEGOCIATION;
+
+    return VID_OK;
+
+}
+
+// SHORTCUT FOR FORMATS //
+static enum vid_result vid_set_checked_format(int fd, enum v4l2_buf_type type, unsigned width, unsigned height, unsigned pixelformat) {
+    
+    struct v4l2_format fmt = {0};
+    fmt.type = type;
+    fmt.fmt.pix.width = width;
+    fmt.fmt.pix.height = height;
+    fmt.fmt.pix.pixelformat = pixelformat;
+
+    enum vid_result res = vid_set_format(fd, &fmt);
+    if (res != VID_OK)
+        return res;
+    
+    if (fmt.fmt.pix.width != width || fmt.fmt.pix.height != height || fmt.fmt.pix.pixelformat != pixelformat)
+        return VID_ERR_NEGOCIATION;
+
+    return VID_OK;
+
+}
+
+static enum vid_result vid_set_checked_format_mp(int fd, enum v4l2_buf_type type, unsigned width, unsigned height, unsigned pixelformat, unsigned planes) {
+    
+    struct v4l2_format fmt = {0};
+    fmt.type = type;
+    fmt.fmt.pix_mp.width = width;
+    fmt.fmt.pix_mp.height = height;
+    fmt.fmt.pix_mp.pixelformat = pixelformat;
+    fmt.fmt.pix_mp.num_planes = planes;
+
+    enum vid_result res = vid_set_format(fd, &fmt);
+    if (res != VID_OK)
+        return res;
+    
+    if (fmt.fmt.pix.width != width || fmt.fmt.pix.height != height || fmt.fmt.pix.pixelformat != pixelformat)
+        return VID_ERR_NEGOCIATION;
+
+    return VID_OK;
+
+}
 
 // SHORTCUT FOR REQUEST BUFFERS //
 static enum vid_result vid_request_checked_buffers(int fd, enum v4l2_buf_type type, enum v4l2_memory memory, unsigned count) {
