@@ -156,3 +156,25 @@ enum vid_result vid_unqueue_buffer(int fd, struct v4l2_buffer *buf) {
         return VID_ERR_NEGOCIATION;
     return VID_OK;
 }
+
+///
+/// CONTROLS ///
+///
+
+enum vid_result vid_query_control(int fd, struct v4l2_query_ext_ctrl *query) {
+    if (RETRY_INT(ioctl(fd, VIDIOC_QUERY_EXT_CTRL, query)) == -1)
+        return VID_ERR_SYS;
+    return VID_OK;
+}
+
+enum vid_result vid_get_control(int fd, struct v4l2_ext_controls *ctrl) {
+    if (RETRY_INT(ioctl(fd, VIDIOC_G_EXT_CTRLS, ctrl)) == -1)
+        return VID_ERR_SYS;
+    return VID_OK;
+}
+
+enum vid_result vid_set_control(int fd, struct v4l2_ext_controls *ctrl) {
+    if (RETRY_INT(ioctl(fd, VIDIOC_S_EXT_CTRLS, ctrl)) == -1)
+        return VID_ERR_SYS;
+    return VID_OK;
+}

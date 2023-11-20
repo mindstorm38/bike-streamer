@@ -2,7 +2,7 @@
 /// This abstraction is specialized for streaming MMAP and DMABUF.
 
 #include <linux/videodev2.h>
-
+#include <linux/v4l2-controls.h>
 
 enum vid_result {
     VID_OK = 0,
@@ -34,6 +34,10 @@ enum vid_result vid_export_buffer(int fd, struct v4l2_exportbuffer *exp);
 enum vid_result vid_query_buffer(int fd, struct v4l2_buffer *buf);
 enum vid_result vid_queue_buffer(int fd, struct v4l2_buffer *buf);
 enum vid_result vid_unqueue_buffer(int fd, struct v4l2_buffer *buf);
+
+enum vid_result vid_query_control(int fd, struct v4l2_query_ext_ctrl *query);
+enum vid_result vid_get_control(int fd, struct v4l2_ext_controls *ctrl);
+enum vid_result vid_set_control(int fd, struct v4l2_ext_controls *ctrl);
 
 // SHORTCUT FOR SELECTION //
 static enum vid_result vid_get_checked_selection(int fd, enum v4l2_buf_type type, unsigned target, struct v4l2_rect *rect) {

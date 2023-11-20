@@ -1,2 +1,4 @@
 /main
-/out.h264
+/out.*
+/test.*
+*.dump

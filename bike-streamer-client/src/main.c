@@ -73,6 +73,29 @@ static void print_formats(int fd, enum v4l2_buf_type type) {
     }
 }
 
+static void print_class_ctrls(int fd, int base) {   
+    struct v4l2_query_ext_ctrl query = {0};
+    for (query.id = base; query.id < base + 50; query.id++) {
+        if (vid_query_control(fd, &query) == VID_OK) {
+            printf("      %30s 0x%08X (%d) : min=%lld max=%lld step=%llu default=%llu\n", 
+                query.name, query.id, query.type, 
+                query.minimum, query.maximum,
+                query.step, query.default_value);
+        }
+    }
+}
+
+static void print_ctrls(int fd) {
+    printf("      User controls\n");
+    print_class_ctrls(fd, V4L2_CID_USER_BASE);
+    printf("      Camera controls\n");
+    print_class_ctrls(fd, V4L2_CID_CAMERA_CLASS_BASE);
+    printf("      Image source controls\n");
+    print_class_ctrls(fd, V4L2_CID_IMAGE_SOURCE_CLASS_BASE);
+    printf("      Image processing controls\n");
+    print_class_ctrls(fd, V4L2_CID_IMAGE_PROC_CLASS_BASE);
+}
+
 
 #define BUFFERS_COUNT 4
 
@@ -100,9 +123,9 @@ int main() {
     
     printf("info: opening video devices...\n");
     check_res(vid_open(&sensor_fd, "/dev/video0"));    // IMX477
-    check_res(vid_open(&adapter_fd, "/dev/video12"));  // BCM2835
-    check_res(vid_open(&encoder_fd, "/dev/video11"));  // BCM2835
-
+    check_res(vid_open(&adapter_fd, "/dev/video12"));  // BCM2835-CODEC-ISP
+    check_res(vid_open(&encoder_fd, "/dev/video11"));  // BCM2835-CODEC-ENCODE
+    
     printf("info: checking capabilities...\n");
     check_res(vid_query_capability(sensor_fd, &cap));
     check_cap(&cap, V4L2_CAP_VIDEO_CAPTURE, "sensor device must support video 'capture'");
@@ -111,7 +134,21 @@ int main() {
     check_res(vid_query_capability(encoder_fd, &cap));
     check_cap(&cap, V4L2_CAP_VIDEO_M2M_MPLANE, "encoder device must support video 'mplane m2m'");
 
-    // print_formats(adapter_fd, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+    printf("info: setting sensor controls...\n");
+    print_ctrls(sensor_fd);
+
+    struct v4l2_ext_control set_ctrl[2] = {0};
+    set_ctrl[0].id = V4L2_CID_TEST_PATTERN;
+    set_ctrl[0].value = 0;
+    set_ctrl[1].id = V4L2_CID_ANALOGUE_GAIN;
+    set_ctrl[1].value = 978;
+
+    struct v4l2_ext_controls set_ctrls = {0};
+    set_ctrls.which = V4L2_CTRL_WHICH_CUR_VAL;
+    set_ctrls.count = 2;
+    set_ctrls.controls = set_ctrl;
+
+    check_res(vid_set_control(sensor_fd, &set_ctrls));
 
     printf("info: setting sensor capture format...\n");
     struct v4l2_format sensor_cap_fmt = {0};
