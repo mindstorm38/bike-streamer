@@ -12,7 +12,8 @@ libcamera-hello --list-camera
 v4l2-ctl --list-devices
 echo 0x1f > /sys/class/video4linux/video0/dev_debug
 echo 0x1f > /sys/class/video4linux/video11/dev_debug
-echo 0x1f > /sys/class/video4linux/video12/dev_debug
+echo 0x1f > /sys/class/video4linux/video13/dev_debug
+echo 0x1f > /sys/class/video4linux/video14/dev_debug
 ```
 
 Usufull links:
