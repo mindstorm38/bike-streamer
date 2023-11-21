@@ -12,10 +12,14 @@
 #include <stdio.h>
 #include <errno.h>
 
+#include "bcm2835-isp.h"
+
 
 /// Internal structure to keep track of sensor memory mapped buffers.
 struct buffer_map {
+    /// Userspace pointer where the buffer starts.
     void *start;
+    /// The length of the buffer.
     unsigned length;
 };
 
@@ -143,20 +147,36 @@ int main() {
     check_cap(&cap, V4L2_CAP_VIDEO_M2M_MPLANE, "encoder device must support video 'mplane m2m'");
 
     printf("info: setting sensor controls...\n");
-    print_ctrls(sensor_fd);
 
-    struct v4l2_ext_control set_ctrl[2] = {0};
-    set_ctrl[0].id = V4L2_CID_TEST_PATTERN;
-    set_ctrl[0].value = 0;
-    set_ctrl[1].id = V4L2_CID_ANALOGUE_GAIN;
-    set_ctrl[1].value = 978;
+    struct v4l2_ext_control sensor_set_ctrl[2] = {0};
+    sensor_set_ctrl[0].id = V4L2_CID_TEST_PATTERN;
+    sensor_set_ctrl[0].value = 0;
+    sensor_set_ctrl[1].id = V4L2_CID_ANALOGUE_GAIN;
+    sensor_set_ctrl[1].value = 700;
 
-    struct v4l2_ext_controls set_ctrls = {0};
-    set_ctrls.which = V4L2_CTRL_WHICH_CUR_VAL;
-    set_ctrls.count = 2;
-    set_ctrls.controls = set_ctrl;
+    struct v4l2_ext_controls sensor_set_ctrls = {0};
+    sensor_set_ctrls.which = V4L2_CTRL_WHICH_CUR_VAL;
+    sensor_set_ctrls.count = sizeof(sensor_set_ctrl) / sizeof(struct v4l2_ext_control);
+    sensor_set_ctrls.controls = sensor_set_ctrl;
 
-    check_res(vid_set_control(sensor_fd, &set_ctrls));
+    check_res(vid_set_control(sensor_fd, &sensor_set_ctrls));
+
+    printf("info: setting adapter controls...\n");
+
+    struct v4l2_ext_control adapter_set_ctrl[3] = {0};
+    adapter_set_ctrl[0].id = V4L2_CID_RED_BALANCE;
+    adapter_set_ctrl[0].value = 1000;
+    adapter_set_ctrl[1].id = V4L2_CID_BLUE_BALANCE;
+    adapter_set_ctrl[1].value = 1000;
+    adapter_set_ctrl[2].id = V4L2_CID_DIGITAL_GAIN;
+    adapter_set_ctrl[2].value = 1000;
+
+    struct v4l2_ext_controls adapter_set_ctrls = {0};
+    adapter_set_ctrls.which = V4L2_CTRL_WHICH_CUR_VAL;
+    adapter_set_ctrls.count = sizeof(adapter_set_ctrl) / sizeof(struct v4l2_ext_control);
+    adapter_set_ctrls.controls = adapter_set_ctrl;
+
+    check_res(vid_set_control(adapter_out_fd, &adapter_set_ctrls));
 
     printf("info: setting sensor capture format...\n");
     // struct v4l2_format sensor_cap_fmt = {0};
@@ -295,7 +315,7 @@ int main() {
     fds[2].fd = adapter_cap_fd;
     fds[2].events = POLLIN;
     fds[3].fd = encoder_fd;
-    fds[3].events = POLLIN;
+    fds[3].events = POLLIN | POLLOUT;
 
     for (int z = 0; z < 1000; z++) {
 
@@ -315,11 +335,25 @@ int main() {
         short int adapter_cap_events = fds[2].revents;
         short int encoder_events = fds[3].revents;
 
+        // Checking errors here...
         if (sensor_events & POLLERR) {
             fprintf(stderr, "error: sensor error\n");
-            // sleep(5);
-            // exit(1);
-        } else if (sensor_events & POLLIN) {
+        }
+
+        if (adapter_cap_events & POLLERR) {
+            fprintf(stderr, "error: adapter cap error\n");
+        }
+
+        if (adapter_out_events & POLLERR) {
+            fprintf(stderr, "error: adapter out error\n");
+        }
+
+        if (encoder_events & POLLERR) {
+            fprintf(stderr, "error: encoder error\n");
+        }
+
+        // Now checking actual events and process pipeline...
+        if (sensor_events & POLLIN) {
 
             // Start by unqueueing a potential captured buffer.            
             struct v4l2_buffer cap_buf = {0};
@@ -339,7 +373,6 @@ int main() {
                     printf("info: writing raw file...\n");
                     ftruncate(fileno(out_raw_file), 0);
                     fseek(out_raw_file, 0, 0);
-                    // fputs("P6 1920 1080 255\n", out_raw_file);
                     fwrite(map->start, 1, cap_buf.bytesused, out_raw_file);
                 }
 
@@ -369,11 +402,7 @@ int main() {
 
         }
 
-        if (adapter_out_events & POLLERR) {
-            fprintf(stderr, "error: adapter out error\n");
-            // sleep(5);
-            // exit(1);
-        } else if (adapter_out_events & POLLOUT) {
+        if (adapter_out_events & POLLOUT) {
 
             // Try unqueuing a previous output buffer.
             struct v4l2_buffer out_buf = {0};
@@ -386,10 +415,8 @@ int main() {
             }
 
         }
-
-        if (adapter_cap_events & POLLERR) {
-            fprintf(stderr, "error: adapter cap error\n");
-        } else if (adapter_cap_events & POLLIN) {
+        
+        if (adapter_cap_events & POLLIN) {
 
             struct v4l2_buffer cap_buf = {0};
             cap_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -405,11 +432,10 @@ int main() {
                 // struct buffer_map *map = &adapter_buffers_map[cap_buf.index];
 
                 // if (z >= 990) {
-                //     printf("info: writing raw ppm file...\n");
+                //     printf("info: writing raw file...\n");
                 //     ftruncate(fileno(out_raw_file), 0);
                 //     fseek(out_raw_file, 0, 0);
-                //     fputs("P6 1920 1080 255\n", out_raw_file);
-                //     unsigned long written_size = fwrite(map->start, 1, cap_plane.bytesused, out_raw_file);
+                //     fwrite(map->start, 1, cap_buf.bytesused, out_raw_file);
                 // }
 
                 // Read the comment above, the pattern is the same here except the the 
@@ -437,12 +463,8 @@ int main() {
             }
 
         }
-
-        if (encoder_events & POLLERR) {
-            fprintf(stderr, "error: encoder error\n");
-            // sleep(5);
-            // exit(1);
-        } else if (encoder_events & POLLIN) {
+        
+        if (encoder_events & POLLIN) {
             
             struct v4l2_plane cap_plane = {0};     
             struct v4l2_buffer cap_buf = {0};
@@ -473,6 +495,10 @@ int main() {
 
             }
 
+        }
+
+        if (encoder_events & POLLOUT) {
+
             // Try unqueuing a previous output buffer.
             struct v4l2_plane out_plane = {0};     
             struct v4l2_buffer out_buf = {0};
@@ -485,7 +511,7 @@ int main() {
                 // printf("info: encoder output buffer %d unqueued (fd %d)\n", out_buf.index, out_plane.m.fd);
                 check_res(vid_queue_mmap_buffer(adapter_cap_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE, out_buf.index));
             }
-
+            
         }
 
     }
