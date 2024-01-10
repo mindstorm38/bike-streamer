@@ -50,6 +50,10 @@ du logiciel MediaMTX, qui gère directement ce que je voulais faire.
 
 ## Poursuite du travail
 
+Je souhaiterais poursuivre le projet, mais sans contrainte de temps et ainsi pouvoir
+reprendre mon travail plus bas niveau et ainsi y apporter de la télémétrie, ce que je
+n'ai pas eu le temps de faire.
+
 ## Annexes
 
 1. Un dépôt Git regroupant le client (acquisition et transmission) et le serveur 
