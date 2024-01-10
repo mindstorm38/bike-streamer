@@ -30,3 +30,31 @@ Le logiciel que je prévois d’utiliser :
 
 ## Scénario d'utilisation
 
+Le scénario d'utilisation principal pour lequel a été pensé le projet consiste à avoir
+une Raspberry PI avec une caméra d'un côté, et de lancer un logiciel capable de lire un
+flux en protocol HLS, tel que VLC (ou OBS avec une source VLC).
+
+## Budget
+
+Le projet n'a pas été couteux pour moi, puisque j'avais déjà tout le matériel et j'avais
+en partie déjà réfléchis à ce projet.
+
+## Bilan
+
+Ce projet était ambitieux, mais clairement réalisable. Malheuresement je n'ai pas su
+trouver la motivation pour le réaliser jusqu'au bout. J'aurais également aimé décendre
+plus bah dans le fonctionnement de linux mais celà s'est avéré être très mal documenté
+avec peu de personne s'y intéressant réellement. J'ai obtenu des résultats prometteurs
+mais je ne voyais pas le bout, j'ai opté pour une solution plus simple avec l'utilisation
+du logiciel MediaMTX, qui gère directement ce que je voulais faire.
+
+## Poursuite du travail
+
+## Annexes
+
+1. Un dépôt Git regroupant le client (acquisition et transmission) et le serveur 
+(réception des images) est hebergé sur GitHub : 
+https://github.com/mindstorm38/bike-streamer
+2. Documentation sur les caméra Raspberry PI : 
+https://www.raspberrypi.com/documentation/accessories/camera.html
+3. Site de l’éditeur VSCode : https://code.visualstudio.com/
