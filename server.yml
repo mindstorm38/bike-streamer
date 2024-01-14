@@ -73,7 +73,7 @@ runOnDisconnect:
 # Global settings -> RTSP server
 
 # Allow publishing and reading streams with the RTSP protocol.
-rtsp: no
+rtsp: yes
 # List of enabled RTSP transport protocols.
 # UDP is the most performant, but doesn't work when there's a NAT/firewall between
 # server and clients, and doesn't support encryption.
@@ -556,10 +556,8 @@ paths:
   # my_camera:
   #   source: rtsp://my_camera
 
-  cam:
-    source: rpiCamera
-    rpiCameraBitrate: 5000000
-    rpiCameraTextOverlayEnable: true
+  cam_push:
+    source: publisher
 
   # Settings under path "all_others" are applied to all paths that
   # do not match another entry.
