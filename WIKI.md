@@ -19,12 +19,12 @@ final si le projet est un succès ou non, car j’ai conscience que les transmis
 
 ## Matériel utilisé
 
-Le matériel que je prévois d’utiliser pour l’instant :
+Le matériel utilié :
 - Un Raspberry Pi 4 (5 si possible) avec au moins 4 Go de RAM ;
 - Raspberry Pi HQ Camera ;
 - Un ordinateur quelconque (pour le serveur).
 
-Le logiciel que je prévois d’utiliser :
+Le logiciel utilisé :
 - Les bibliothèques C du Raspberry Pi pour le programme d’acquisition et de transmission ;
 - L’éditeur de texte VSCode pour le développement
 
